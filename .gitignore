@@ -1,0 +1,6 @@
+dist/
+scan-projects
+scan-projects.exe
+*.json
+.DS_Store
+
