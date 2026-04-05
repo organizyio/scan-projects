@@ -1,13 +1,11 @@
-// Package scanner provides functionality to scan directories for projects
-// and collect project metadata including Git information and language stacks.
-package scanner
+package catalog
 
 import (
 	"fmt"
 	"os"
 )
 
-// Logger handles verbose logging for the scanner.
+// Logger handles verbose logging for the catalog CLI.
 type Logger struct {
 	verbose bool
 }

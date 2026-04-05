@@ -1,6 +1,4 @@
-// Package scanner provides functionality to scan directories for projects
-// and collect project metadata including Git information and language stacks.
-package scanner
+package catalog
 
 import (
 	"fmt"
@@ -13,35 +11,31 @@ import (
 // ProgressBar displays scanning progress with a visual bar, percentage,
 // and statistics about directories scanned and projects found.
 type ProgressBar struct {
-	Total     int       // Total number of directories to scan
-	Current   int       // Current number of directories scanned
-	Projects  int       // Number of projects found so far
-	StartTime time.Time // When scanning started
-	Width     int       // Width of the progress bar in characters
+	Total     int
+	Current   int
+	Projects  int
+	StartTime time.Time
+	Width     int
 }
 
-// getTerminalWidth attempts to detect the terminal width, falling back to a default.
 func getTerminalWidth() int {
-	// Try to get terminal width from environment variables
 	if cols := os.Getenv("COLUMNS"); cols != "" {
 		var width int
 		if _, err := fmt.Sscanf(cols, "%d", &width); err == nil && width > 20 {
-			return width - 20 // Leave some margin
+			return width - 20
 		}
 	}
-	// Default to 50 characters for progress bar
 	return 50
 }
 
 // NewProgressBar creates a new progress bar with the specified total count.
-// It attempts to detect terminal width and adjusts the bar width accordingly.
 func NewProgressBar(total int) *ProgressBar {
 	width := getTerminalWidth()
 	if width < 20 {
-		width = 20 // Minimum width
+		width = 20
 	}
 	if width > 80 {
-		width = 80 // Maximum width
+		width = 80
 	}
 	return &ProgressBar{
 		Total:     total,
@@ -62,7 +56,6 @@ func (p *ProgressBar) Increment(isProject bool) {
 	p.Render()
 }
 
-// formatDuration formats a duration in a human-readable way.
 func formatDuration(d time.Duration) string {
 	if d < time.Second {
 		return fmt.Sprintf("%dms", d.Milliseconds())
@@ -75,11 +68,10 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dm%ds", minutes, seconds)
 }
 
-// Render updates the progress bar display on stdout, showing the current
-// progress, percentage, statistics, and ETA.
+// Render updates the progress bar display on stdout.
 func (p *ProgressBar) Render() {
 	if p.Total == 0 {
-		return // Don't render if total is unknown
+		return
 	}
 
 	ratio := float64(p.Current) / float64(p.Total)
@@ -94,7 +86,6 @@ func (p *ProgressBar) Render() {
 
 	percent := int(ratio * 100)
 
-	// Calculate ETA
 	elapsed := time.Since(p.StartTime)
 	var etaStr string
 	if p.Current > 0 && p.Current < p.Total {
@@ -104,7 +95,6 @@ func (p *ProgressBar) Render() {
 		etaStr = fmt.Sprintf(" | ETA: %s", formatDuration(eta))
 	}
 
-	// overwrite previous line using carriage return
 	fmt.Fprintf(os.Stdout,
 		"\r%s %3d%% | scanned: %d/%d dirs | projects: %d%s",
 		bar, percent, p.Current, p.Total, p.Projects, etaStr,

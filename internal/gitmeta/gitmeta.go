@@ -1,6 +1,5 @@
-// Package scanner provides functionality to scan directories for projects
-// and collect project metadata including Git information and language stacks.
-package scanner
+// Package gitmeta fills model.ProjectInfo from git subprocess output (no catalog/UI deps).
+package gitmeta
 
 import (
 	"bufio"
@@ -11,8 +10,11 @@ import (
 	"scan-projects/internal/model"
 )
 
-// runGit executes a git command in the specified directory and returns
-// the trimmed stdout output and any error that occurred.
+// Logger receives optional debug lines when git commands fail.
+type Logger interface {
+	Debugf(format string, args ...interface{})
+}
+
 func runGit(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
@@ -23,18 +25,13 @@ func runGit(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// parseRemoteURL tries to parse a remote URL into host, owner, repoSlug.
-// Supports SSH (git@host:owner/repo.git), HTTPS (https://host/owner/repo.git),
-// and handles ports, trailing slashes, and enterprise URLs.
 func parseRemoteURL(url string) (host, owner, repoSlug *string) {
 	if url == "" {
 		return nil, nil, nil
 	}
 
-	// Remove trailing slashes
 	url = strings.TrimSuffix(url, "/")
 
-	// SSH: git@github.com:owner/repo.git or git@github.com:2222:owner/repo.git
 	if strings.HasPrefix(url, "git@") {
 		parts := strings.SplitN(url, "@", 2)
 		if len(parts) != 2 {
@@ -42,8 +39,6 @@ func parseRemoteURL(url string) (host, owner, repoSlug *string) {
 		}
 		right := parts[1]
 
-		// Handle port in SSH URL (git@host:port:path)
-		// First try to find the last colon which separates host:port from path
 		lastColon := strings.LastIndex(right, ":")
 		if lastColon == -1 {
 			return nil, nil, nil
@@ -52,11 +47,9 @@ func parseRemoteURL(url string) (host, owner, repoSlug *string) {
 		hostPart := right[:lastColon]
 		path := right[lastColon+1:]
 
-		// Remove port if present (host:port -> host)
 		hostParts := strings.SplitN(hostPart, ":", 2)
 		h := hostParts[0]
 
-		// Parse path (owner/repo.git)
 		path = strings.TrimPrefix(path, "/")
 		p := strings.SplitN(path, "/", 2)
 		if len(p) != 2 {
@@ -67,20 +60,17 @@ func parseRemoteURL(url string) (host, owner, repoSlug *string) {
 		return &h, &o, &r
 	}
 
-	// HTTPS: https://github.com/owner/repo.git or http://gitlab.example.com/owner/repo.git
 	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
 		noProto := strings.SplitN(url, "://", 2)
 		if len(noProto) != 2 {
 			return nil, nil, nil
 		}
 
-		// Split host from path
 		parts := strings.SplitN(noProto[1], "/", 2)
 		if len(parts) < 1 {
 			return nil, nil, nil
 		}
 
-		// Host may contain port (host:port)
 		hostParts := strings.SplitN(parts[0], ":", 2)
 		h := hostParts[0]
 
@@ -101,11 +91,8 @@ func parseRemoteURL(url string) (host, owner, repoSlug *string) {
 	return nil, nil, nil
 }
 
-// collectGitInfo enriches a ProjectInfo struct with Git metadata by
-// querying the Git repository at the given path. It populates remotes,
-// branch information, and working directory status.
-// If logger is provided, debug information will be logged when verbose mode is enabled.
-func collectGitInfo(path string, info *model.ProjectInfo, logger *Logger) {
+// Enrich populates Git-related fields on info for a repository at path.
+func Enrich(path string, info *model.ProjectInfo, logger Logger) {
 	info.IsGit = true
 	info.HasOrigin = false
 	info.Remotes = []model.RemoteInfo{}
@@ -117,7 +104,6 @@ func collectGitInfo(path string, info *model.ProjectInfo, logger *Logger) {
 	info.TrackingBranch = ""
 	info.Dirty = nil
 
-	// remotes
 	remotesOut, err := runGit(path, "remote", "-v")
 	if err != nil && logger != nil {
 		logger.Debugf("Failed to get remotes for %s: %v", path, err)
@@ -156,7 +142,6 @@ func collectGitInfo(path string, info *model.ProjectInfo, logger *Logger) {
 		}
 	}
 
-	// current branch
 	cur, err := runGit(path, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil && logger != nil {
 		logger.Debugf("Failed to get current branch for %s: %v", path, err)
@@ -165,22 +150,20 @@ func collectGitInfo(path string, info *model.ProjectInfo, logger *Logger) {
 		info.CurrentBranch = cur
 	}
 
-	// local branches
 	branchesOut, err := runGit(path, "branch", "--format", "%(refname:short)")
 	if err != nil && logger != nil {
 		logger.Debugf("Failed to get branches for %s: %v", path, err)
 	}
 	if err == nil && branchesOut != "" {
-		scanner := bufio.NewScanner(strings.NewReader(branchesOut))
-		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
+		lineScan := bufio.NewScanner(strings.NewReader(branchesOut))
+		for lineScan.Scan() {
+			line := strings.TrimSpace(lineScan.Text())
 			if line != "" {
 				info.LocalBranches = append(info.LocalBranches, line)
 			}
 		}
 	}
 
-	// tracking branch
 	if info.CurrentBranch != "" {
 		tracking, err := runGit(path, "rev-parse", "--abbrev-ref", info.CurrentBranch+"@{upstream}")
 		if err != nil && logger != nil {
@@ -191,7 +174,6 @@ func collectGitInfo(path string, info *model.ProjectInfo, logger *Logger) {
 		}
 	}
 
-	// dirty?
 	statusOut, err := runGit(path, "status", "--porcelain")
 	if err != nil && logger != nil {
 		logger.Debugf("Failed to get status for %s: %v", path, err)
