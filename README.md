@@ -1,3 +1,13 @@
+# Historical repository: scan-projects
+
+Maintenance moves to [organizyio/scanner/tools/project-catalog](https://github.com/organizyio/scanner/tree/main/tools/project-catalog) after the [validated consolidation](https://github.com/organizyio/scanner/pull/3). Use Scanner's current build and component-release instructions. This original repository retains historical commits, review records, tags and immutable release assets for recovery; it will be archived after consumer cutover and artifact validation. Local checkouts/worktrees are retained.
+
+Original public history is retained as Scanner ancestry under `tools/project-catalog`; the Go CLI and Fyne source are preserved.
+
+Repository consolidation does not establish runtime convergence or product release acceptance. The material below is historical.
+
+---
+
 # scan-projects
 
 Monorepo with three ways to inspect disks:
